@@ -51,6 +51,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_loss_for_log = 0.0
     ema_dist_for_log = 0.0
     ema_normal_for_log = 0.0
+    ema_geo_for_log = 0.0
 
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -94,7 +95,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         normal_error = (rend_normal - surf_normal).abs().sum(dim=0)[None]
         normal_loss = lambda_normal * (normal_error).mean()
         dist_loss = lambda_dist * (rend_dist).mean()
-        geo_loss = 0
+        geo_loss = torch.tensor(0.0, dtype=surf_depth.dtype, device=surf_depth.device)
 
         if args.use_geo and iteration < 3000:
             gaussians._opacity_geo = gaussians.inverse_opacity_activation(torch.ones_like(gaussians.get_opacity_geo) * 0.99)
@@ -129,6 +130,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             ema_dist_for_log = 0.4 * dist_loss.item() + 0.6 * ema_dist_for_log
             ema_normal_for_log = 0.4 * normal_loss.item() + 0.6 * ema_normal_for_log
+            ema_geo_for_log = 0.4 * geo_loss.item() + 0.6 * ema_geo_for_log
 
 
             if iteration % 10 == 0:
@@ -136,6 +138,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     "Loss": f"{ema_loss_for_log:.{5}f}",
                     "distort": f"{ema_dist_for_log:.{5}f}",
                     "normal": f"{ema_normal_for_log:.{5}f}",
+                    "geo": f"{ema_geo_for_log:.{5}f}",
                     "Points": f"{len(gaussians.get_xyz)}"
                 }
                 progress_bar.set_postfix(loss_dict)
@@ -171,6 +174,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
+                    if args.use_geo and args.use_gt:
+                        gaussians.reset_opacity_geo()
 
             if iteration > opt.densify_until_iter and iteration < opt.iterations and args.use_geo and False:
                 if iteration % opt.densification_interval == 0:

@@ -18,6 +18,7 @@ from utils.render_utils import save_img_f32, save_img_u8
 from functools import partial
 import open3d as o3d
 import trimesh
+from utils.graphics_utils import fov2focal
 
 def post_process_mesh(mesh, cluster_to_keep=1000):
     """
@@ -176,6 +177,50 @@ class GaussianExtractor(object):
             )
 
             volume.integrate(rgbd, intrinsic=cam_o3d.intrinsic, extrinsic=cam_o3d.extrinsic)
+
+        mesh = volume.extract_triangle_mesh()
+        return mesh
+
+    @torch.no_grad()
+    def extract_translab_mesh(self, voxel_size=0.004, sdf_trunc=0.02, depth_trunc=3, mask_backgrond=True):
+        print("Running tsdf volume integration ...")
+        print(f'voxel_size: {voxel_size}')
+        print(f'sdf_trunc: {sdf_trunc}')
+        print(f'depth_truc: {depth_trunc}')
+
+        volume = o3d.pipelines.integration.ScalableTSDFVolume(
+            voxel_length= voxel_size,
+            sdf_trunc=sdf_trunc,
+            color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8
+        )
+
+        for i, view in tqdm(enumerate((self.viewpoint_stack)), desc="TSDF integration progress"):
+            rgb = self.rgbmaps[i]
+            depth = self.depthmaps[i]
+            
+            # if we have mask provided, use it
+            if mask_backgrond and (self.viewpoint_stack[i].gt_alpha_mask is not None):
+                depth[(self.viewpoint_stack[i].gt_alpha_mask < 0.5)] = 0
+            depth[depth > depth_trunc] = 0
+            depth = depth.squeeze().numpy()
+            # make open3d rgbd
+            depth = o3d.geometry.Image((depth*1000).astype(np.uint16))
+            rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+                o3d.geometry.Image(np.asarray(np.clip(rgb.permute(1,2,0).cpu().numpy(), 0.0, 1.0) * 255, order="C", dtype=np.uint8)),
+                depth,
+                depth_trunc = depth_trunc, convert_rgb_to_intensity=False,
+                depth_scale = 1000.0
+            )
+            pose = np.identity(4)
+            pose[:3,:3] = view.R.transpose(-1,-2)
+            pose[:3, 3] = view.T
+            _, H, W = rgb.shape
+            Fx = fov2focal(view.FoVx, view.image_width)
+            Fy = fov2focal(view.FoVy, view.image_height)
+            volume.integrate(
+                rgbd,
+                o3d.camera.PinholeCameraIntrinsic(W, H, Fx, Fy, view.image_width / 2, view.image_height / 2),
+                pose)
 
         mesh = volume.extract_triangle_mesh()
         return mesh

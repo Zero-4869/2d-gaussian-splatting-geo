@@ -43,6 +43,7 @@ if __name__ == "__main__":
     parser.add_argument("--unbounded", action="store_true", help='Mesh: using unbounded mode for meshing')
     parser.add_argument("--mesh_res", default=1024, type=int, help='Mesh: resolution for unbounded mesh extraction')
     parser.add_argument("--use_geo", action="store_true", default=False)
+    parser.add_argument("--dataset_name", type=str, default="dataset")
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
@@ -89,22 +90,31 @@ if __name__ == "__main__":
                     num_frames=n_fames)
 
     if not args.skip_mesh:
-        print("export mesh ...")
-        os.makedirs(train_dir, exist_ok=True)
-        # set the active_sh to 0 to export only diffuse texture
-        gaussExtractor.gaussians.active_sh_degree = 0
-        gaussExtractor.reconstruction(scene.getTrainCameras())
-        # extract the mesh and save
-        if args.unbounded:
-            name = 'fuse_unbounded.ply'
-            mesh = gaussExtractor.extract_mesh_unbounded(resolution=args.mesh_res)
-        else:
+        if args.dataset_name == "translab":
+            print("export mesh ...")
+            os.makedirs(train_dir, exist_ok=True)
+            sdf_trunc = 4.0*args.voxel_size
             name = 'fuse.ply'
-            depth_trunc = (gaussExtractor.radius * 2.0) if args.depth_trunc < 0  else args.depth_trunc
-            voxel_size = (depth_trunc / args.mesh_res) if args.voxel_size < 0 else args.voxel_size
-            sdf_trunc = 5.0 * voxel_size if args.sdf_trunc < 0 else args.sdf_trunc
-            mesh = gaussExtractor.extract_mesh_bounded(voxel_size=voxel_size, sdf_trunc=sdf_trunc, depth_trunc=depth_trunc)
-        
+            gaussExtractor.gaussians.active_sh_degree = 0
+            gaussExtractor.reconstruction(scene.getTrainCameras())
+            mesh = gaussExtractor.extract_translab_mesh(voxel_size=args.voxel_size, sdf_trunc=sdf_trunc, depth_trunc=args.depth_trunc)
+        else:
+            print("export mesh ...")
+            os.makedirs(train_dir, exist_ok=True)
+            # set the active_sh to 0 to export only diffuse texture
+            gaussExtractor.gaussians.active_sh_degree = 0
+            gaussExtractor.reconstruction(scene.getTrainCameras())
+            # extract the mesh and save
+            if args.unbounded:
+                name = 'fuse_unbounded.ply'
+                mesh = gaussExtractor.extract_mesh_unbounded(resolution=args.mesh_res)
+            else:
+                name = 'fuse.ply'
+                depth_trunc = (gaussExtractor.radius * 2.0) if args.depth_trunc < 0  else args.depth_trunc
+                voxel_size = (depth_trunc / args.mesh_res) if args.voxel_size < 0 else args.voxel_size
+                sdf_trunc = 5.0 * voxel_size if args.sdf_trunc < 0 else args.sdf_trunc
+                mesh = gaussExtractor.extract_mesh_bounded(voxel_size=voxel_size, sdf_trunc=sdf_trunc, depth_trunc=depth_trunc)
+            
         o3d.io.write_triangle_mesh(os.path.join(train_dir, name), mesh)
         print("mesh saved at {}".format(os.path.join(train_dir, name)))
         # post-process the mesh and save, saving the largest N clusters

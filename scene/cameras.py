@@ -54,12 +54,15 @@ class Camera(nn.Module):
         resize = torchvision.transforms.Resize((self.image_height, self.image_width), interpolation=torchvision.transforms.InterpolationMode.BILINEAR)
         self.depth_gt = None
         if os.path.exists(os.path.join(folder_name, "depth_gt")):
-            depth_gt_path = os.path.join(folder_name, "depth_gt", mode, self.image_name + ".pt")
-            depth_gt = torch.load(depth_gt_path)
+            if mode in ["train", "val", "test"]:
+                depth_gt_path = os.path.join(folder_name, "depth_gt", mode, self.image_name + ".pt")
+            else:
+                depth_gt_path = os.path.join(folder_name, "depth_gt", self.image_name + ".pt")
+            depth_gt = torch.load(depth_gt_path, weights_only=True)
             if len(depth_gt.shape) == 2:
                 depth_gt = depth_gt.unsqueeze(0)
             self.depth_gt = resize(depth_gt).to(self.data_device)
-            self.gt_alpha_mask = (self.depth_gt > 0).float()
+            self.gt_alpha_mask = (self.depth_gt > 0.5).float()
             
 
         self.zfar = 100.0

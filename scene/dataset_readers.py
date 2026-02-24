@@ -65,7 +65,7 @@ def getNerfppNorm(cam_info):
 
     return {"translate": translate, "radius": radius}
 
-def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
+def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, mask_background=True, extension=".png"):
     cam_infos = []
     for idx, key in enumerate(cam_extrinsics):
         sys.stdout.write('\r')
@@ -98,6 +98,30 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path)
 
+        if mask_background:
+            if image.mode == "RGBA":
+                # last channel is alpha, mask out the background
+                mask = image.getchannel(3)
+                mask = np.array(mask)
+                mask = mask / 255.0
+                mask = mask.astype(np.float32)
+            else:
+                mask_path = image_path[:-4].replace("images", "masks") + extension
+                mask = Image.open(mask_path).convert("L")
+                mask = np.array(mask)
+                mask = mask / 255.0
+                mask[mask > 0.5] = 1
+                mask[mask <= 0.5] = 0
+                mask = mask.astype(np.float32)
+            image_array = np.array(image)
+            # 只保留RGB通道并应用mask
+            image_array = image_array[:, :, :3] * mask[..., None]
+            image = Image.fromarray(image_array.astype(np.uint8), "RGB")
+            # 转换为RGBA格式,将mask作为alpha通道
+            r, g, b = image.split()
+            alpha = Image.fromarray((mask * 255).astype(np.uint8), "L")
+            image = Image.merge("RGBA", (r, g, b, alpha))
+
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                               image_path=image_path, image_name=image_name, width=width, height=height)
         cam_infos.append(cam_info)
@@ -129,7 +153,7 @@ def storePly(path, xyz, rgb):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
-def readColmapSceneInfo(path, images, eval, llffhold=8):
+def readColmapSceneInfo(path, images, eval, llffhold=8, mask_background=True):
     try:
         cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
         cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
@@ -142,7 +166,7 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
         cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
 
     reading_dir = "images" if images == None else images
-    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
+    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir), mask_background=mask_background)
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
     if eval:
