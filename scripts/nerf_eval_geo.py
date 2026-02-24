@@ -20,7 +20,7 @@ dry_run = False
 
 excluded_gpus = set([])
 
-out_name = "baseline_depthgt_nogeo"
+out_name = "geo_depthgt_nogeo"
 
 
 jobs = list(itertools.product(scenes, factors))
@@ -32,22 +32,22 @@ def train_scene(gpu, scene, factor):
     os.system(cmd)
 
     # cmd = f"OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES={gpu} python train.py -s {dataset_dir}/{scene} -m {output_dir}/{scene}/{out_name} --eval --depth_ratio 1.0 \
-    #     --lambda_dist 1000 --port {6209+int(gpu)} --save_iterations 7000 16000 30000 --test_iterations 30000 --white_background"
+    #     --lambda_dist 1000 --port {6209+int(gpu)} --save_iterations 7000 16000 30000 --test_iterations 30000 --use_geo --white_background"
     # print(cmd)
     # if not dry_run:
     #     os.system(cmd)
     cmd = f"OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES={gpu} python train.py -s {dataset_dir}/{scene} -m {output_dir}/{scene}/{out_name} --eval \
-        --lambda_normal 0.0 --port {6209+int(gpu)} --save_iterations 7000 16000 30000 --test_iterations 30000 --white_background"
+        --lambda_normal 0.0 --port {6209+int(gpu)} --save_iterations 7000 16000 30000 --test_iterations 30000 --use_geo --white_background --use_gt"
     print(cmd)
     if not dry_run:
         os.system(cmd)
 
-    cmd = f"OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES={gpu} python render.py -m {output_dir}/{scene}/{out_name} --skip_train --skip_mesh"
+    cmd = f"OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES={gpu} python render.py -m {output_dir}/{scene}/{out_name} --skip_train --skip_mesh --use_geo"
     print(cmd)
     if not dry_run:
         os.system(cmd)
 
-    cmd = f"OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES={gpu} python render.py -m {output_dir}/{scene}/{out_name} --skip_train --skip_test"
+    cmd = f"OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES={gpu} python render.py -m {output_dir}/{scene}/{out_name} --skip_train --skip_test --use_geo"
     print(cmd)
     if not dry_run:
         os.system(cmd)

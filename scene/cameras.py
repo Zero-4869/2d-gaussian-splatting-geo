@@ -12,10 +12,12 @@
 import torch
 from torch import nn
 import numpy as np
+import os
+import torchvision
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 
 class Camera(nn.Module):
-    def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
+    def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask, image_path,
                  image_name, uid,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda"
                  ):
@@ -46,7 +48,20 @@ class Camera(nn.Module):
         else:
             # self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device) # do we need this?
             self.gt_alpha_mask = None
-        
+
+        folder_name = os.path.dirname(os.path.dirname(os.path.join(image_path)))
+        mode = os.path.basename(os.path.dirname(image_path))
+        resize = torchvision.transforms.Resize((self.image_height, self.image_width), interpolation=torchvision.transforms.InterpolationMode.BILINEAR)
+        self.depth_gt = None
+        if os.path.exists(os.path.join(folder_name, "depth_gt")):
+            depth_gt_path = os.path.join(folder_name, "depth_gt", mode, self.image_name + ".pt")
+            depth_gt = torch.load(depth_gt_path)
+            if len(depth_gt.shape) == 2:
+                depth_gt = depth_gt.unsqueeze(0)
+            self.depth_gt = resize(depth_gt).to(self.data_device)
+            self.gt_alpha_mask = (self.depth_gt > 0).float()
+            
+
         self.zfar = 100.0
         self.znear = 0.01
 
